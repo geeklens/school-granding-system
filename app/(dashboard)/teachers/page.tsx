@@ -33,7 +33,7 @@ import { Plus, Trash2, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
 export default function TeachersPage() {
-    const { users, subjects, assignments, assignTeacher, removeAssignment, currentUser, students } = useAppStore()
+    const { users, subjects, groups, assignments, assignTeacher, removeAssignment, currentUser } = useAppStore()
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [selectedTeacher, setSelectedTeacher] = useState("")
     const [selectedSubject, setSelectedSubject] = useState("")
@@ -42,8 +42,8 @@ export default function TeachersPage() {
 
     if (!currentUser) return null
 
-    // Unique groups
-    const uniqueGroups = Array.from(new Set(students.map(s => s.group))).sort()
+    // Unique groups from store metadata
+    const uniqueGroups = groups.map(g => g.name).sort()
     const teachersList = users.filter(u => u.role === 'TEACHER' || u.permissions?.includes('MANAGE_GRADES'))
     const canEdit = currentUser.role === 'ADMIN' ||
         currentUser.permissions?.includes('MANAGE_ASSIGNMENTS') ||

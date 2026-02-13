@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table"
 
 export default function ReportsPage() {
-    const { students, grades, subjects, users, currentUser } = useAppStore()
+    const { stats, subjects, users, currentUser } = useAppStore()
 
     if (!currentUser || (currentUser.role !== 'ADMIN' && !currentUser.permissions?.includes('VIEW_REPORTS'))) {
         return (
@@ -40,66 +40,26 @@ export default function ReportsPage() {
         )
     }
 
-    // 1. Course Distribution
-    const courseLabels = ["1 курс", "2 курс", "3 курс", "4 курс"]
-    const courseDistribution = courseLabels.map((label, idx) => ({
-        name: label,
-        count: students.filter(s => s.course === idx + 1).length
-    }))
-
-    // 2. Gender Distribution
-    const genderLabels = ["Мужской", "Женский"]
-    const genderDistribution = genderLabels.map(label => ({
-        name: label,
-        value: students.filter(s => s.gender === label).length
-    }))
-
-    // 3. Language Statistics
-    const uniqueLanguages = Array.from(new Set(students.map(s => s.language))).filter(Boolean)
-    const languageStats = uniqueLanguages.map(lang => ({
-        name: lang,
-        count: students.filter(s => s.language === lang).length
-    })).sort((a, b) => b.count - a.count)
-
-    // 4. Nationality Statistics
-    const uniqueNationalities = Array.from(new Set(students.map(s => s.nationality))).filter(Boolean)
-    const nationalityStats = uniqueNationalities.map(nat => ({
-        name: nat,
-        count: students.filter(s => s.nationality === nat).length
-    })).sort((a, b) => b.count - a.count)
+    const {
+        totalStudents,
+        totalGroups,
+        courseDistribution,
+        genderDistribution
+    } = stats;
 
     const handleExportStudents = () => {
-        const data = students.map(s => ({
-            "ФИО": s.name,
-            "HEMIS ID": s.hemisId,
-            "Группа": s.group,
-            "Курс": s.course,
-            "Пол": s.gender,
-            "Национальность": s.nationality,
-            "Язык": s.language
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
-        XLSX.writeFile(workbook, "Student_Analytics.xlsx");
-        toast.success("Данные студентов экспортированы");
+        toast.info("Функция экспорта всего контингента (8.5 млн) временно ограничена разработчиком. Используйте выгрузку по группам.");
     };
 
     const handleExportGrades = () => {
-        if (grades.length === 0) {
-            toast.error("Нет данных об оценках для экспорта");
-            return;
-        }
-        exportAllGradesToExcel(students, grades, subjects, users);
-        toast.success("Все оценки экспортированы в Excel");
+        toast.info("Функция экспорта всех оценок временно ограничена. Используйте выгрузку по группам/предметам.");
     };
 
-    const stats = [
-        { label: "Студенты", value: students.length, icon: Users, color: "text-blue-500", bg: "bg-blue-500/5", border: "border-blue-500/10" },
-        { label: "Группы", value: Array.from(new Set(students.map(s => s.group))).length, icon: LayoutGrid, color: "text-indigo-500", bg: "bg-indigo-500/5", border: "border-indigo-500/10" },
-        { label: "Нации", value: uniqueNationalities.length, icon: Globe, color: "text-orange-500", bg: "bg-orange-500/5", border: "border-orange-500/10" },
-        { label: "Языки", value: uniqueLanguages.length, icon: Languages, color: "text-emerald-500", bg: "bg-emerald-500/5", border: "border-emerald-500/10" },
+    const dashboardStats = [
+        { label: "Студенты", value: totalStudents, icon: Users, color: "text-blue-500", bg: "bg-blue-500/5", border: "border-blue-500/10" },
+        { label: "Группы", value: totalGroups, icon: LayoutGrid, color: "text-indigo-500", bg: "bg-indigo-500/5", border: "border-indigo-500/10" },
+        { label: "Курсы", value: 4, icon: FileText, color: "text-orange-500", bg: "bg-orange-500/5", border: "border-orange-500/10" },
+        { label: "Языки", value: 2, icon: Languages, color: "text-emerald-500", bg: "bg-emerald-500/5", border: "border-emerald-500/10" },
     ]
 
     const PIE_COLORS = ['hsl(var(--primary))', 'hsl(var(--primary)/0.3)'];
@@ -126,7 +86,7 @@ export default function ReportsPage() {
 
             {/* Standard Stats Grid */}
             <div className="grid gap-4 md:grid-cols-4">
-                {stats.map((stat) => (
+                {dashboardStats.map((stat) => (
                     <div key={stat.label} className={`p-4 rounded-md border ${stat.border} bg-transparent transition-all hover:scale-[1.02] duration-300`}>
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">{stat.label}</span>
@@ -211,54 +171,6 @@ export default function ReportsPage() {
                                 />
                             </PieChart>
                         </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Table 1: Nationalities */}
-                <div className="md:col-span-4 space-y-4">
-                    <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-bold px-1">Национальный состав</h2>
-                    <div className="rounded-md border border-border/40 overflow-hidden bg-transparent">
-                        <Table>
-                            <TableHeader className="bg-muted/5">
-                                <TableRow className="hover:bg-transparent border-border/40">
-                                    <TableHead className="pl-4 font-bold uppercase text-[9px] tracking-widest py-3 text-muted-foreground/60">Национальность</TableHead>
-                                    <TableHead className="text-right pr-4 font-bold uppercase text-[9px] tracking-widest py-3 text-muted-foreground/60">Студентов</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {nationalityStats.map((nat, idx) => (
-                                    <TableRow key={idx} className="hover:bg-primary/[0.01] border-border/40 last:border-0">
-                                        <TableCell className="pl-4 py-2 font-bold text-xs tracking-tight">{nat.name}</TableCell>
-                                        <TableCell className="text-right pr-4 text-xs font-bold text-muted-foreground/60">{nat.count}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-
-                {/* Table 2: Languages */}
-                <div className="md:col-span-3 space-y-4">
-                    <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-bold px-1">Языки обучения</h2>
-                    <div className="rounded-md border border-border/40 overflow-hidden bg-transparent">
-                        <Table>
-                            <TableHeader className="bg-muted/5">
-                                <TableRow className="hover:bg-transparent border-border/40">
-                                    <TableHead className="pl-4 font-bold uppercase text-[9px] tracking-widest py-3 text-muted-foreground/60">Язык</TableHead>
-                                    <TableHead className="text-right pr-4 font-bold uppercase text-[9px] tracking-widest py-3 text-muted-foreground/60">Доля</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {languageStats.map((lang, idx) => (
-                                    <TableRow key={idx} className="hover:bg-primary/[0.01] border-border/40 last:border-0">
-                                        <TableCell className="pl-4 py-2 font-bold text-xs tracking-tight">{lang.name}</TableCell>
-                                        <TableCell className="text-right pr-4 text-[10px] font-bold text-muted-foreground/60">
-                                            {((lang.count / students.length) * 100).toFixed(0)}%
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
                     </div>
                 </div>
             </div>

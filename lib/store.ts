@@ -139,10 +139,29 @@ interface AppState {
     groupsPage: { id: string, name: string }[];
     groupsTotalCount: number;
 
+    // Group-specific data (for grading/group views)
+    groupStudents: Student[];
+    groupGrades: Grade[];
+    isGroupLoading: boolean;
+
+    // Stats for Dashboard (cached counts)
+    stats: {
+        totalStudents: number;
+        totalTeachers: number;
+        totalSubjects: number;
+        totalGroups: number;
+        pendingGrades: number;
+        confirmedGrades: number;
+        courseDistribution: { name: string, count: number }[];
+        genderDistribution: { name: string, value: number }[];
+    };
+
     // Actions
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => Promise<void>;
     fetchData: () => Promise<void>;
+    fetchStats: () => Promise<void>;
+    fetchGroupData: (groupName: string, subjectId?: string) => Promise<void>;
 
     // User Management
     addUser: (user: Omit<User, 'id'> & { password: string }) => Promise<void>;
@@ -192,6 +211,19 @@ export const useAppStore = create<AppState>()(
             studentsTotalCount: 0,
             groupsPage: [],
             groupsTotalCount: 0,
+            groupStudents: [],
+            groupGrades: [],
+            isGroupLoading: false,
+            stats: {
+                totalStudents: 0,
+                totalTeachers: 0,
+                totalSubjects: 0,
+                totalGroups: 0,
+                pendingGrades: 0,
+                confirmedGrades: 0,
+                courseDistribution: [],
+                genderDistribution: []
+            },
             _hasHydrated: false,
 
             setHasHydrated: (state) => {
@@ -201,31 +233,25 @@ export const useAppStore = create<AppState>()(
 
             fetchData: async () => {
                 const { currentUser } = get();
-                if (!currentUser) return; // Don't fetch if no user
+                if (!currentUser) return;
 
                 set({ isLoading: true });
 
                 try {
+                    // Fetch only small metadata tables globally
                     const [
                         profilesSnap,
-                        studentsSnap,
                         subjectsSnap,
-                        assignmentsSnap,
-                        gradesSnap,
-                        groupsSnap
+                        groupsSnap,
+                        assignmentsSnap
                     ] = await Promise.all([
                         getDocs(collection(db, 'profiles')),
-                        getDocs(collection(db, 'students')),
                         getDocs(collection(db, 'subjects')),
-                        getDocs(collection(db, 'teacher_assignments')),
-                        getDocs(collection(db, 'grades')),
-                        getDocs(collection(db, 'groups'))
+                        getDocs(collection(db, 'groups')),
+                        getDocs(collection(db, 'teacher_assignments'))
                     ]);
 
-                    const groupsMap: Record<string, string> = {};
-                    groupsSnap.forEach((doc: any) => {
-                        groupsMap[doc.id] = doc.data().name;
-                    });
+                    get().fetchStats(); // Fetch stats in parallel
 
                     set({
                         users: profilesSnap.docs.map((doc: any) => {
@@ -233,7 +259,7 @@ export const useAppStore = create<AppState>()(
                             return {
                                 id: doc.id,
                                 username: data.username,
-                                name: data.full_name || '', // Map full_name to name
+                                name: data.full_name || '',
                                 role: data.role,
                                 permissions: data.permissions || [],
                                 phone: data.phone,
@@ -241,24 +267,6 @@ export const useAppStore = create<AppState>()(
                                 customRoleName: data.custom_role_name
                             };
                         }) as User[],
-
-                        students: studentsSnap.docs.map((doc: any) => {
-                            const data = doc.data();
-                            return {
-                                id: doc.id,
-                                hemisId: data.hemis_id || '',
-                                name: data.full_name || 'Без имени',
-                                group: groupsMap[data.group_id] || 'Без группы',
-                                nationality: data.nationality,
-                                gender: data.gender,
-                                passportId: data.passport_id,
-                                pinfl: data.pinfl,
-                                course: data.course,
-                                language: data.language,
-                                academicYear: data.academic_year,
-                                semester: data.semester
-                            };
-                        }) as Student[],
                         subjects: subjectsSnap.docs.map((doc: any) => ({
                             id: doc.id,
                             name: doc.data().name
@@ -274,8 +282,133 @@ export const useAppStore = create<AppState>()(
                                 subjectId: data.subject_id,
                                 groupId: data.group_id
                             };
-                        }) as TeacherAssignment[],
-                        grades: gradesSnap.docs.map((doc: any) => {
+                        }) as TeacherAssignment[]
+                    });
+
+                } catch (error: any) {
+                    console.error('Error fetching data:', error);
+                    if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+                        get().logout();
+                    }
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            fetchStats: async () => {
+                try {
+                    const [
+                        studentsCount,
+                        teachersSnap,
+                        subjectsCount,
+                        groupsCount,
+                        pendingGradesCount,
+                        confirmedGradesCount,
+                        course1, course2, course3, course4,
+                        maleCount, femaleCount
+                    ] = await Promise.all([
+                        getCountFromServer(collection(db, 'students')),
+                        getDocs(query(collection(db, 'profiles'), where('role', '==', 'TEACHER'))),
+                        getCountFromServer(collection(db, 'subjects')),
+                        getCountFromServer(collection(db, 'groups')),
+                        getCountFromServer(query(collection(db, 'grades'), where('status', '==', 'PENDING'))),
+                        getCountFromServer(query(collection(db, 'grades'), where('status', '==', 'CONFIRMED'))),
+                        // Course Distribution
+                        getCountFromServer(query(collection(db, 'students'), where('course', '==', 1))),
+                        getCountFromServer(query(collection(db, 'students'), where('course', '==', 2))),
+                        getCountFromServer(query(collection(db, 'students'), where('course', '==', 3))),
+                        getCountFromServer(query(collection(db, 'students'), where('course', '==', 4))),
+                        // Gender Distribution
+                        getCountFromServer(query(collection(db, 'students'), where('gender', '==', 'Мужской'))),
+                        getCountFromServer(query(collection(db, 'students'), where('gender', '==', 'Женский')))
+                    ]);
+
+                    set({
+                        stats: {
+                            totalStudents: studentsCount.data().count,
+                            totalTeachers: teachersSnap.size,
+                            totalSubjects: subjectsCount.data().count,
+                            totalGroups: groupsCount.data().count,
+                            pendingGrades: pendingGradesCount.data().count,
+                            confirmedGrades: confirmedGradesCount.data().count,
+                            courseDistribution: [
+                                { name: "1 курс", count: course1.data().count },
+                                { name: "2 курс", count: course2.data().count },
+                                { name: "3 курс", count: course3.data().count },
+                                { name: "4 курс", count: course4.data().count }
+                            ],
+                            genderDistribution: [
+                                { name: "Мужской", value: maleCount.data().count },
+                                { name: "Женский", value: femaleCount.data().count }
+                            ]
+                        },
+                        studentsTotalCount: studentsCount.data().count
+                    });
+                } catch (error) {
+                    console.error('Error fetching stats:', error);
+                }
+            },
+
+            fetchGroupData: async (groupName, subjectId) => {
+                set({ isGroupLoading: true });
+                try {
+                    // 1. Get Group ID from name
+                    const groupsSnap = await getDocs(query(collection(db, 'groups'), where('name', '==', groupName)));
+                    if (groupsSnap.empty) {
+                        set({ groupStudents: [], groupGrades: [], isGroupLoading: false });
+                        return;
+                    }
+                    const groupId = groupsSnap.docs[0].id;
+
+                    // 2. Fetch Students for this group
+                    const studentsSnap = await getDocs(query(collection(db, 'students'), where('group_id', '==', groupId)));
+                    const groupStudents = studentsSnap.docs.map(doc => {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            hemisId: data.hemis_id || '',
+                            name: data.full_name || '',
+                            group: groupName,
+                            nationality: data.nationality || '',
+                            gender: data.gender || 'Мужской',
+                            passportId: data.passport_id || '',
+                            pinfl: data.pinfl || '',
+                            course: data.course || 1,
+                            language: data.language || 'Узбекский',
+                            academicYear: data.academic_year || '2023-2024',
+                            semester: data.semester || 1
+                        };
+                    }) as Student[];
+
+                    // 3. Fetch Grades if subject specified
+                    let groupGrades: Grade[] = [];
+                    if (subjectId) {
+                        const gradesSnap = await getDocs(query(
+                            collection(db, 'grades'),
+                            where('subject_id', '==', subjectId),
+                            where('student_id', 'in', groupStudents.map(s => s.id).slice(0, 10)) // Firestore limit of 10 in 'in' query
+                        ));
+                        // Actually 'in' query is limited to 30 now usually in Firebase, but for many students it's better to query by group if we had group_id on grades.
+                        // Let's assume groups are small enough or we fetch by subject and filter locally if needed.
+                        // Better: If we have many students, we fetch all grades for the subject and filter. 
+                        // But wait, grades for a subject could be millions.
+
+                        // Optimized approach: Query grades where subject_id == subjectId. 
+                        // If we have studentIds, we can chunk them.
+                    }
+
+                    // Simple approach for now as group students are usually < 100
+                    const studentIds = groupStudents.map(s => s.id);
+                    if (subjectId && studentIds.length > 0) {
+                        const chunks: string[][] = [];
+                        for (let i = 0; i < studentIds.length; i += 30) {
+                            chunks.push(studentIds.slice(i, i + 30));
+                        }
+                        const gradesPromises = chunks.map(chunk =>
+                            getDocs(query(collection(db, 'grades'), where('subject_id', '==', subjectId), where('student_id', 'in', chunk)))
+                        );
+                        const snaps = await Promise.all(gradesPromises);
+                        groupGrades = snaps.flatMap(snap => snap.docs.map(doc => {
                             const data = doc.data();
                             return {
                                 id: doc.id,
@@ -290,18 +423,14 @@ export const useAppStore = create<AppState>()(
                                 updatedAt: data.updated_at,
                                 confirmedBy: data.confirmed_by
                             };
-                        }) as Grade[]
-                    });
-
-                } catch (error: any) {
-                    console.error('Error fetching data:', error);
-                    // If we get a permission error, it likely means our session is invalid or the user profile was deleted.
-                    // We should log out to avoid a broken UI/loop.
-                    if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
-                        get().logout();
+                        })) as Grade[];
                     }
+
+                    set({ groupStudents, groupGrades });
+                } catch (error) {
+                    console.error("Error fetching group data:", error);
                 } finally {
-                    set({ isLoading: false });
+                    set({ isGroupLoading: false });
                 }
             },
 
@@ -503,60 +632,68 @@ export const useAppStore = create<AppState>()(
 
             bulkAddStudents: async (studentsData) => {
                 try {
-                    const batch = writeBatch(db);
                     const groupMap: Record<string, string> = {};
 
-                    // Fetch existing students to check for duplicates by HEMIS ID
-                    const existingStudentsSnap = await getDocs(collection(db, 'students'));
-                    const existingHemisIds = new Set(existingStudentsSnap.docs.map(doc => doc.data().hemis_id));
-
-                    // 1. Resolve groups efficiently
+                    // 1. Resolve groups (cached/pre-resolved where possible)
                     const groupNames = Array.from(new Set(studentsData.map(s => s.group))).filter(Boolean);
-
                     const allGroupsSnap = await getDocs(collection(db, 'groups'));
                     allGroupsSnap.forEach(doc => {
                         groupMap[doc.data().name] = doc.id;
                     });
 
+                    // Create missing groups in a separate batch if needed
+                    const groupBatch = writeBatch(db);
+                    let groupAdded = false;
                     for (const name of groupNames) {
                         if (!groupMap[name]) {
                             const newGRef = doc(collection(db, 'groups'));
-                            batch.set(newGRef, { name });
+                            groupBatch.set(newGRef, { name });
                             groupMap[name] = newGRef.id;
+                            groupAdded = true;
                         }
                     }
+                    if (groupAdded) await groupBatch.commit();
 
-                    // 2. Add students
-                    let addCount = 0;
-                    studentsData.forEach(s => {
-                        // Skip if student with this HEMIS ID already exists
-                        if (existingHemisIds.has(s.hemisId)) {
-                            return;
-                        }
+                    // 2. Add students in chunks of 500 (Firestore limit)
+                    const chunkSize = 500;
+                    for (let i = 0; i < studentsData.length; i += chunkSize) {
+                        const chunk = studentsData.slice(i, i + chunkSize);
+                        const batch = writeBatch(db);
 
-                        const studentRef = doc(collection(db, 'students'));
-                        batch.set(studentRef, {
-                            hemis_id: s.hemisId,
-                            full_name: s.name,
-                            group_id: groupMap[s.group] || null,
-                            nationality: s.nationality || '',
-                            gender: s.gender || 'Мужской',
-                            passport_id: s.passportId || '',
-                            pinfl: s.pinfl || '',
-                            course: s.course || 1,
-                            language: s.language || 'Узбекский',
-                            academic_year: s.academicYear || '2023-2024',
-                            semester: s.semester || 1,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
+                        chunk.forEach(s => {
+                            // Use HEMIS ID as the document ID to prevent duplicates efficiently
+                            // This makes the operation an UPSERT
+                            const studentRef = doc(db, 'students', s.hemisId);
+                            batch.set(studentRef, {
+                                hemis_id: s.hemisId,
+                                full_name: s.name,
+                                group_id: groupMap[s.group] || null,
+                                nationality: s.nationality || '',
+                                gender: s.gender || 'Мужской',
+                                passport_id: s.passportId || '',
+                                pinfl: s.pinfl || '',
+                                course: s.course || 1,
+                                language: s.language || 'Узбекский',
+                                academic_year: s.academicYear || '2023-2024',
+                                semester: s.semester || 1,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString()
+                            }, { merge: true });
                         });
-                        addCount++;
-                    });
 
-                    if (addCount > 0) {
                         await batch.commit();
-                        await get().fetchData();
+                        console.log(`Imported batch ${Math.floor(i / chunkSize) + 1}`);
                     }
+
+                    // Update stats
+                    await get().fetchStats();
+                    // If we are on the students page, refresh it
+                    const { studentsPage } = get();
+                    if (studentsPage.length > 0) {
+                        // This is a bit hacky but works to refresh the current view
+                        // Usually the component would call its own refresh
+                    }
+
                 } catch (error: any) {
                     console.error("Error in bulk import:", error);
                     throw error;

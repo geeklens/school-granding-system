@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useAppStore, GradeType, User, Grade } from "@/lib/store"
+import { useState, useMemo, useEffect } from "react"
+import { useAppStore, GradeType, User, Grade, Student } from "@/lib/store"
 import {
     Table,
     TableBody,
@@ -113,7 +113,20 @@ const SearchableSelect = ({ options, value, onValueChange, placeholder, emptyTex
 export default function GroupGradingPage() {
     const params = useParams()
     const router = useRouter()
-    const { currentUser, students, subjects, users, grades, assignments, saveGroupGrades, confirmGrade, assignTeacher, removeAssignment } = useAppStore()
+    const {
+        currentUser,
+        groupStudents,
+        groupGrades,
+        subjects,
+        users,
+        assignments,
+        saveGroupGrades,
+        confirmGrade,
+        assignTeacher,
+        removeAssignment,
+        fetchGroupData,
+        isGroupLoading
+    } = useAppStore()
 
     // State
     const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
@@ -123,6 +136,16 @@ export default function GroupGradingPage() {
     const [newSubjectId, setNewSubjectId] = useState("")
     const [newTeacherId, setNewTeacherId] = useState("")
 
+    // Data Retrieval - Decode classId
+    const classId = params.classId as string;
+    const currentGroupId = decodeURIComponent(classId);
+
+    useEffect(() => {
+        if (currentGroupId) {
+            fetchGroupData(currentGroupId, selectedSubjectId || undefined);
+        }
+    }, [currentGroupId, selectedSubjectId, fetchGroupData]);
+
     if (!currentUser) return null
 
     // Permissions logic
@@ -131,11 +154,7 @@ export default function GroupGradingPage() {
     const canManageAssignments = currentUser.permissions?.includes('MANAGE_ASSIGNMENTS') || currentUser.role === 'ADMIN';
     const isAdmin = currentUser.role === 'ADMIN';
 
-    // 1. Data Retrieval - Decode classId in case of / in the ID
-    const classId = params.classId as string;
-    const currentGroupId = decodeURIComponent(classId);
-
-    const classStudents = students.filter(s => s.group === currentGroupId).sort((a, b) => a.name.localeCompare(b.name));
+    const classStudents = [...groupStudents].sort((a, b) => a.name.localeCompare(b.name));
 
     // Get assigned subjects for this group
     const groupAssignments = assignments.filter(a => a.groupId === currentGroupId);
@@ -151,21 +170,26 @@ export default function GroupGradingPage() {
         availableGradingSubjects = groupSubjects.filter(s => teacherSubjectIds.includes(s.id));
     }
 
-    // 2. Handlers
     const enterGradingMode = (subjectId: string) => {
         setSelectedSubjectId(subjectId);
-        // Initialize local state
-        const newLocalGrades: Record<string, { midterm: string, final: string }> = {};
-        classStudents.forEach(student => {
-            const midterm = grades.find(g => g.studentId === student.id && g.subjectId === subjectId && g.type === 'MIDTERM');
-            const final = grades.find(g => g.studentId === student.id && g.subjectId === subjectId && g.type === 'FINAL');
-            newLocalGrades[student.id] = {
-                midterm: midterm ? String(midterm.value) : "",
-                final: final ? String(final.value) : ""
-            };
-        });
-        setLocalGrades(newLocalGrades);
+        // fetchGroupData will be triggered by useEffect
     }
+
+    // When groupGrades change (after fetch), update localGrades
+    useEffect(() => {
+        if (selectedSubjectId) {
+            const newLocalGrades: Record<string, { midterm: string, final: string }> = {};
+            classStudents.forEach(student => {
+                const midterm = groupGrades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === 'MIDTERM');
+                const final = groupGrades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === 'FINAL');
+                newLocalGrades[student.id] = {
+                    midterm: midterm ? String(midterm.value) : "",
+                    final: final ? String(final.value) : ""
+                };
+            });
+            setLocalGrades(newLocalGrades);
+        }
+    }, [groupGrades, selectedSubjectId]);
 
     const handleBack = () => {
         setSelectedSubjectId("");
@@ -184,23 +208,23 @@ export default function GroupGradingPage() {
 
     const handleSave = () => {
         if (!selectedSubjectId) return;
-        const gradesToSave: { studentId: string, subjectId: string, teacherId: string, value: number, type: GradeType }[] = [];
+        const groupGradesToSave: { studentId: string, subjectId: string, teacherId: string, value: number, type: GradeType }[] = [];
         Object.entries(localGrades).forEach(([studentId, data]) => {
             if (data.midterm) {
                 const val = parseFloat(data.midterm);
-                if (!isNaN(val)) gradesToSave.push({ studentId, subjectId: selectedSubjectId, teacherId: currentUser.id, value: val, type: 'MIDTERM' });
+                if (!isNaN(val)) groupGradesToSave.push({ studentId, subjectId: selectedSubjectId, teacherId: currentUser.id, value: val, type: 'MIDTERM' });
             }
             if (data.final) {
                 const val = parseFloat(data.final);
-                if (!isNaN(val)) gradesToSave.push({ studentId, subjectId: selectedSubjectId, teacherId: currentUser.id, value: val, type: 'FINAL' });
+                if (!isNaN(val)) groupGradesToSave.push({ studentId, subjectId: selectedSubjectId, teacherId: currentUser.id, value: val, type: 'FINAL' });
             }
         });
-        saveGroupGrades(gradesToSave);
+        saveGroupGrades(groupGradesToSave);
         toast.success("Оценки сохранены!");
     }
 
     const handleConfirmAll = () => {
-        const pendingGrades = grades.filter(g =>
+        const pendingGrades = groupGrades.filter(g =>
             g.subjectId === selectedSubjectId && g.type === examType && g.status === 'PENDING' && classStudents.some(s => s.id === g.studentId)
         );
         if (pendingGrades.length === 0) {
@@ -233,7 +257,7 @@ export default function GroupGradingPage() {
     }
 
     const isLocked = (studentId: string, type: GradeType) => {
-        const grade = grades.find(g => g.studentId === studentId && g.subjectId === selectedSubjectId && g.type === type);
+        const grade = groupGrades.find(g => g.studentId === studentId && g.subjectId === selectedSubjectId && g.type === type);
         return grade?.status === 'CONFIRMED' && !isAdmin;
     }
 
@@ -241,7 +265,7 @@ export default function GroupGradingPage() {
     const getProgressStats = (subjectId: string, type: GradeType) => {
         if (classStudents.length === 0) return { count: 0, total: 0 };
         const count = classStudents.filter(s =>
-            grades.some(g => g.studentId === s.id && g.subjectId === subjectId && g.type === type)
+            groupGrades.some(g => g.studentId === s.id && g.subjectId === subjectId && g.type === type)
         ).length;
         return { count, total: classStudents.length };
     }
@@ -585,7 +609,7 @@ export default function GroupGradingPage() {
                                     currentGroupId,
                                     subject.name,
                                     classStudents,
-                                    grades,
+                                    groupGrades,
                                     selectedSubjectId,
                                     examType
                                 );
@@ -624,10 +648,10 @@ export default function GroupGradingPage() {
                             const currentVal = examType === 'MIDTERM' ? midtermVal : finalVal;
                             const locked = isLocked(student.id, examType);
 
-                            const gradeInStore = grades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === examType);
+                            const gradeInStore = groupGrades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === examType);
                             const isPending = gradeInStore?.status === 'PENDING';
 
-                            const midtermGradeObj = grades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === 'MIDTERM');
+                            const midtermGradeObj = groupGrades.find(g => g.studentId === student.id && g.subjectId === selectedSubjectId && g.type === 'MIDTERM');
                             const isMidtermConfirmed = midtermGradeObj?.status === 'CONFIRMED';
                             const isSequenceLocked = examType === 'FINAL' && !isMidtermConfirmed;
 

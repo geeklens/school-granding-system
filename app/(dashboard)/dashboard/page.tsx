@@ -14,19 +14,20 @@ import {
 import { Badge } from "@/components/ui/badge"
 
 export default function DashboardPage() {
-    const { currentUser, students, users, subjects, grades } = useAppStore()
+    const { currentUser, users, subjects, stats } = useAppStore()
 
     if (!currentUser) return null
 
-    const totalStudents = students.length
-    const totalTeachers = users.filter(u => u.role === 'TEACHER').length
-    const totalSubjects = subjects.length
-    const totalGroups = Array.from(new Set(students.map(s => s.group))).length
+    const totalStudents = stats.totalStudents
+    const totalTeachers = stats.totalTeachers
+    const totalSubjects = stats.totalSubjects
+    const totalGroups = stats.totalGroups
 
-    const pendingGrades = grades.filter(g => g.status === 'PENDING').length
-    const confirmedGrades = grades.filter(g => g.status === 'CONFIRMED').length
+    const pendingGrades = stats.pendingGrades
+    const confirmedGrades = stats.confirmedGrades
+    const totalGrades = pendingGrades + confirmedGrades
 
-    const stats = [
+    const dashboardStats = [
         {
             title: "Студенты",
             value: totalStudents,
@@ -72,7 +73,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-4">
-                {stats.map((stat) => (
+                {dashboardStats.map((stat) => (
                     <div key={stat.title} className={`p-4 rounded-md border ${stat.border} bg-transparent transition-all hover:scale-[1.02] duration-300`}>
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">{stat.title}</span>
@@ -95,12 +96,12 @@ export default function DashboardPage() {
                                     <CheckCircle2 className="size-3.5" />
                                     Подтвержденные баллы
                                 </span>
-                                <span className="text-muted-foreground">{confirmedGrades} / {grades.length}</span>
+                                <span className="text-muted-foreground">{confirmedGrades} / {totalGrades}</span>
                             </div>
                             <div className="h-1.5 w-full bg-muted/10 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-green-500/60 transition-all duration-1000 ease-out"
-                                    style={{ width: `${grades.length > 0 ? (confirmedGrades / grades.length) * 100 : 0}%` }}
+                                    style={{ width: `${totalGrades > 0 ? (confirmedGrades / totalGrades) * 100 : 0}%` }}
                                 />
                             </div>
                         </div>
@@ -111,17 +112,17 @@ export default function DashboardPage() {
                                     <Clock className="size-3.5" />
                                     Ожидают проверки
                                 </span>
-                                <span className="text-muted-foreground">{pendingGrades} / {grades.length}</span>
+                                <span className="text-muted-foreground">{pendingGrades} / {totalGrades}</span>
                             </div>
                             <div className="h-1.5 w-full bg-muted/10 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-amber-500/60 transition-all duration-1000 ease-out"
-                                    style={{ width: `${grades.length > 0 ? (pendingGrades / grades.length) * 100 : 0}%` }}
+                                    style={{ width: `${totalGrades > 0 ? (pendingGrades / totalGrades) * 100 : 0}%` }}
                                 />
                             </div>
                         </div>
 
-                        {grades.length === 0 && (
+                        {totalGrades === 0 && (
                             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground/20 italic">
                                 <AlertCircle className="size-10 mb-2 opacity-5" />
                                 <p className="text-xs font-medium">Нет данных о успеваемости</p>
