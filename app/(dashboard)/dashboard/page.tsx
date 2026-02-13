@@ -12,9 +12,13 @@ import {
     CalendarDays
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { useTranslation } from "@/lib/hooks"
+import { format } from "date-fns"
+import { ru, enUS, uz } from "date-fns/locale"
 
 export default function DashboardPage() {
     const { currentUser, users, subjects, stats } = useAppStore()
+    const { t, language } = useTranslation()
 
     if (!currentUser) return null
 
@@ -29,7 +33,7 @@ export default function DashboardPage() {
 
     const dashboardStats = [
         {
-            title: "Студенты",
+            title: t('dashboard.totalStudents'),
             value: totalStudents,
             icon: GraduationCap,
             color: "text-blue-500",
@@ -37,7 +41,7 @@ export default function DashboardPage() {
             border: "border-blue-500/10"
         },
         {
-            title: "Группы",
+            title: t('dashboard.totalGroups'),
             value: totalGroups,
             icon: Users,
             color: "text-indigo-500",
@@ -45,7 +49,7 @@ export default function DashboardPage() {
             border: "border-indigo-500/10"
         },
         {
-            title: "Учителя",
+            title: t('dashboard.totalTeachers'),
             value: totalTeachers,
             icon: Users,
             color: "text-amber-500",
@@ -53,7 +57,7 @@ export default function DashboardPage() {
             border: "border-amber-500/10"
         },
         {
-            title: "Предметы",
+            title: t('dashboard.totalSubjects'),
             value: totalSubjects,
             icon: BookOpen,
             color: "text-emerald-500",
@@ -62,13 +66,15 @@ export default function DashboardPage() {
         }
     ]
 
+    const dateLocale = language === 'ru' ? ru : language === 'uz' ? uz : enUS;
+
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
             <div className="flex flex-col gap-1.5">
-                <h1 className="text-2xl font-bold tracking-tight">Добро пожаловать, {currentUser.name}!</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{t('dashboard.title')}</h1>
                 <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/50 flex items-center gap-2">
                     <CalendarDays className="size-3" />
-                    {new Date().toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {format(new Date(), 'PPPP', { locale: dateLocale })}
                 </p>
             </div>
 
@@ -88,13 +94,13 @@ export default function DashboardPage() {
 
             <div className="grid gap-6 md:grid-cols-7">
                 <div className="md:col-span-4 space-y-4">
-                    <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-bold px-1">Глобальная статистика оценок</h2>
+                    <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-bold px-1">{t('dashboard.title')}</h2>
                     <div className="rounded-md border border-border/40 p-6 bg-transparent space-y-8">
                         <div className="space-y-3">
                             <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-tight">
                                 <span className="flex items-center gap-2 text-green-500/80">
                                     <CheckCircle2 className="size-3.5" />
-                                    Подтвержденные баллы
+                                    {t('dashboard.confirmedGrades')}
                                 </span>
                                 <span className="text-muted-foreground">{confirmedGrades} / {totalGrades}</span>
                             </div>
@@ -110,7 +116,7 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-tight">
                                 <span className="flex items-center gap-2 text-amber-500/80">
                                     <Clock className="size-3.5" />
-                                    Ожидают проверки
+                                    {t('dashboard.pendingGrades')}
                                 </span>
                                 <span className="text-muted-foreground">{pendingGrades} / {totalGrades}</span>
                             </div>
@@ -125,7 +131,7 @@ export default function DashboardPage() {
                         {totalGrades === 0 && (
                             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground/20 italic">
                                 <AlertCircle className="size-10 mb-2 opacity-5" />
-                                <p className="text-xs font-medium">Нет данных о успеваемости</p>
+                                <p className="text-xs font-medium">{t('common.noData')}</p>
                             </div>
                         )}
                     </div>

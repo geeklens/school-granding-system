@@ -9,9 +9,12 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Lock, User, Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "@/lib/hooks";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export default function LoginPage() {
   const { login, currentUser } = useAppStore();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
@@ -26,7 +29,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      toast.error("Пожалуйста, заполните все поля");
+      toast.error(t('auth.error'));
       return;
     }
 
@@ -37,13 +40,13 @@ export default function LoginPage() {
 
       const success = await login(loginIdentity, password);
       if (success) {
-        toast.success("Все верно! Вход выполнен.");
+        toast.success(t('auth.signIn'));
         router.push("/dashboard");
       } else {
-        toast.error("Неверный логин или пароль");
+        toast.error(t('auth.error'));
       }
     } catch (error) {
-      toast.error("Произошла ошибка при входе");
+      toast.error(t('auth.error'));
     } finally {
       setIsLoading(false);
     }
@@ -58,21 +61,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+    <div className="flex min-h-screen items-center justify-center bg-background text-foreground relative">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher />
+      </div>
       <Card className="w-[380px] border-border shadow-2xl bg-card">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Система Оценок</CardTitle>
-          <CardDescription>Вход в систему</CardDescription>
+          <CardTitle className="text-2xl font-bold">GradeSystem</CardTitle>
+          <CardDescription>{t('auth.login')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Логин (Юзернейм)</Label>
+            <Label htmlFor="email">{t('auth.email')}</Label>
             <div className="relative">
               <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 id="email"
                 type="text"
-                placeholder="ваш_логин"
+                placeholder="login"
                 className="pl-9"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -81,13 +87,13 @@ export default function LoginPage() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Пароль</Label>
+            <Label htmlFor="password">{t('auth.password')}</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Введите пароль"
+                placeholder="*******"
                 className="pl-9 pr-10"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -112,7 +118,7 @@ export default function LoginPage() {
             onClick={handleLogin}
             disabled={isLoading}
           >
-            {isLoading ? "Вход..." : "Войти"}
+            {isLoading ? t('common.loading') : t('auth.signIn')}
           </Button>
 
         </CardContent>

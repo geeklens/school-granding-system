@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { auth, db } from '@/utils/firebase/client';
+import { Locale } from './translations';
 import {
     signInWithEmailAndPassword,
     signOut,
@@ -189,6 +190,10 @@ interface AppState {
     fetchGroupsPage: (page: number, pageSize: number, filters?: { searchTerm?: string, course?: string, flow?: string }) => Promise<void>;
     clearAllStudents: () => Promise<void>;
 
+    // Language
+    language: Locale;
+    setLanguage: (lang: Locale) => void;
+
     // Internal
     _hasHydrated: boolean;
     setHasHydrated: (state: boolean) => void;
@@ -224,6 +229,8 @@ export const useAppStore = create<AppState>()(
                 courseDistribution: [],
                 genderDistribution: []
             },
+            language: 'ru',
+            setLanguage: (lang) => set({ language: lang }),
             _hasHydrated: false,
 
             setHasHydrated: (state) => {

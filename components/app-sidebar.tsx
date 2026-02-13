@@ -13,8 +13,12 @@ import {
     Settings,
     Sun,
     Moon,
-    History
+    History,
+    Globe
 } from "lucide-react"
+
+import { useTranslation } from "@/lib/hooks"
+import { LanguageSwitcher } from "./language-switcher"
 
 import {
     Sidebar,
@@ -45,6 +49,7 @@ import {
 export function AppSidebar() {
     const { currentUser, logout, students } = useAppStore()
     const { theme, setTheme } = useTheme()
+    const { t } = useTranslation()
     const router = useRouter()
     const pathname = usePathname()
 
@@ -55,25 +60,25 @@ export function AppSidebar() {
 
     const mainItems = [
         {
-            title: "Дашборд",
+            title: t('common.dashboard'),
             icon: LayoutDashboard,
             url: "/dashboard",
             role: ["ADMIN", "TEACHER", "RESPONSIBLE"]
         },
         {
-            title: "Группы",
+            title: t('common.groups'),
             icon: Users,
             url: "/groups",
             role: ["ADMIN", "TEACHER", "RESPONSIBLE"]
         },
         {
-            title: "Отчеты",
+            title: t('common.reports'),
             icon: BarChart3,
             url: "/reports",
             role: ["ADMIN", "RESPONSIBLE"]
         },
         {
-            title: "История",
+            title: t('common.logs'),
             icon: History,
             url: "/logs",
             role: ["ADMIN", "RESPONSIBLE"]
@@ -82,19 +87,19 @@ export function AppSidebar() {
 
     const manageItems = [
         {
-            title: "Студенты",
+            title: t('common.students'),
             icon: GraduationCap,
             url: "/students",
             role: ["ADMIN", "RESPONSIBLE", "TEACHER"]
         },
         {
-            title: "Преподаватели",
+            title: t('common.teachers'),
             icon: Users,
             url: "/teachers",
             role: ["ADMIN"]
         },
         {
-            title: "Предметы",
+            title: t('common.subjects'),
             icon: BookOpen,
             url: "/subjects",
             role: ["ADMIN"]
@@ -118,25 +123,28 @@ export function AppSidebar() {
                         <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs shrink-0">
                             {currentUser.name.charAt(0)}
                         </div>
-                        <div className="flex flex-col gap-0.5 leading-none overflow-hidden">
+                        <div className="flex flex-col gap-0.5 leading-none overflow-hidden text-left">
                             <span className="font-semibold text-sm truncate uppercase">{currentUser.name}</span>
                             <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">{currentUser.role}</span>
                         </div>
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-muted-foreground/50 hover:text-foreground transition-colors"
-                        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                    >
-                        {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                        <LanguageSwitcher />
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground/50 hover:text-foreground transition-colors"
+                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                        >
+                            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                        </Button>
+                    </div>
                 </div>
             </SidebarHeader>
 
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Основное</SidebarGroupLabel>
+                    <SidebarGroupLabel>{t('sidebar.grading')}</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {filteredMainItems.map((item) => (
@@ -159,7 +167,7 @@ export function AppSidebar() {
 
                 {filteredManageItems.length > 0 && (
                     <SidebarGroup>
-                        <SidebarGroupLabel>Управление</SidebarGroupLabel>
+                        <SidebarGroupLabel>{t('sidebar.management')}</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
                                 {filteredManageItems.map((item) => (
@@ -197,7 +205,7 @@ export function AppSidebar() {
                                             <div className="flex items-center justify-center size-6 rounded bg-primary/10 text-primary group-hover/btn:bg-primary group-hover/btn:text-primary-foreground transition-colors">
                                                 <UserCog className="size-3.5" />
                                             </div>
-                                            <span className="font-bold text-[10px] uppercase tracking-wider">Управление пользователями</span>
+                                            <span className="font-bold text-[10px] uppercase tracking-wider">{t('common.users')}</span>
                                         </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
@@ -215,7 +223,7 @@ export function AppSidebar() {
                                     <div className="flex items-center justify-center size-6 rounded bg-muted/30 group-hover/exit:bg-red-500/10 transition-colors mr-3">
                                         <LogOut className="size-3.5" />
                                     </div>
-                                    <span className="font-bold text-[10px] uppercase tracking-wider">Выйти из системы</span>
+                                    <span className="font-bold text-[10px] uppercase tracking-wider">{t('common.logout')}</span>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                         </SidebarMenu>
